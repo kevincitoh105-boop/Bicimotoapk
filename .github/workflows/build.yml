@@ -14,6 +14,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Diagnosticar identidad original y configuración DCloud
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          echo "=== FIRMA ORIGINAL ==="
+          "$BT/apksigner" verify --verbose --print-certs app-release-latest.apk || true
+          echo "=== IDENTIDAD ANDROID ==="
+          "$BT/aapt" dump badging app-release-latest.apk | head -5 || true
+          echo "=== ARCHIVOS DCloud/UNI-APP ==="
+          unzip -Z1 app-release-latest.apk | grep -Ei 'manifest.json|dcloud_control.xml|.*\.xml$|app-view.js|app-service.js' | head -80 || true
+          echo "=== APPID / APPKEY: solo presencia, sin revelar valores ==="
+          python3 - <<'PY'
+          import zipfile,re
+          z=zipfile.ZipFile("app-release-latest.apk")
+          pats=[b'__UNI__',b'DCLOUD_APPKEY',b'appkey',b'appKey',b'appid',b'appId']
+          for n in z.namelist():
+              if not (n.endswith(('.xml','.json','.js','.txt')) or 'dcloud' in n.lower()):
+                  continue
+              try: b=z.read(n)
+              except: continue
+              found=[p.decode() for p in pats if re.search(p,re.I) and re.search(p,re.I,b.decode('utf-8','ignore'))]
+              if found: print(n, "=>", ", ".join(found))
+          PY
+
       - name: Verificar APK original
         run: |
           test -s app-release-latest.apk
