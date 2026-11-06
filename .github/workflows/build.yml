@@ -1,27 +1,61 @@
 name: APK Cuba +53
+
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verificar APK de entrada
-        run: test -s app-release-latest.apk
+
+      - name: Verificar APK original
+        run: |
+          test -s app-release-latest.apk
+          unzip -tq app-release-latest.apk
+
       - name: Parchar APK (+86 -> +53)
         run: python3 patch_apk.py app-release-latest.apk patched-unsigned.apk
-      - name: Alinear y firmar
+
+      - name: Alinear, firmar y validar APK
+        shell: bash
         run: |
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          set -euo pipefail
+          BT=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           "$BT/zipalign" -f -p 4 patched-unsigned.apk patched-aligned.apk
+          "$BT/zipalign" -c -v 4 patched-aligned.apk
           keytool -genkeypair -keystore ks.jks -storepass android -keypass android \
             -alias key -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=App Cuba"
-          "$BT/apksigner" sign --ks ks.jks --ks-pass pass:android --key-pass pass:android \
+          "$BT/apksigner" sign \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --ks ks.jks --ks-pass pass:android --key-pass pass:android \
             --out app-release-cuba53.apk patched-aligned.apk
-          "$BT/apksigner" verify --verbose app-release-cuba53.apk
+          "$BT/apksigner" verify --verbose --print-certs app-release-cuba53.apk
+          unzip -tq app-release-cuba53.apk
+          sha256sum app-release-cuba53.apk
+          echo "APK final validada: $(stat -c%s app-release-cuba53.apk) bytes"
+
+      # Artifacto ZIP de respaldo, sin recomprimir la APK.
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-cuba53
           path: app-release-cuba53.apk
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+
+      # Publica también el APK como archivo directo, sin ZIP intermedio.
+      - name: Publicar APK descargable directamente
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cuba53-latest
+          name: APK Cuba +53 (última versión)
+          prerelease: true
+          make_latest: true
+          overwrite_files: true
+          files: app-release-cuba53.apk
