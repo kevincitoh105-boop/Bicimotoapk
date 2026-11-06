@@ -1,0 +1,27 @@
+name: APK Cuba +53
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar APK de entrada
+        run: test -s app-release-latest.apk
+      - name: Parchar APK (+86 -> +53)
+        run: python3 patch_apk.py app-release-latest.apk patched-unsigned.apk
+      - name: Alinear y firmar
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/zipalign" -f -p 4 patched-unsigned.apk patched-aligned.apk
+          keytool -genkeypair -keystore ks.jks -storepass android -keypass android \
+            -alias key -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=App Cuba"
+          "$BT/apksigner" sign --ks ks.jks --ks-pass pass:android --key-pass pass:android \
+            --out app-release-cuba53.apk patched-aligned.apk
+          "$BT/apksigner" verify --verbose app-release-cuba53.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-cuba53
+          path: app-release-cuba53.apk
