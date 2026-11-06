@@ -35,8 +35,20 @@ jobs:
                   continue
               try: b=z.read(n)
               except: continue
-              found=[p.decode() for p in pats if re.search(p,re.I) and re.search(p,re.I,b.decode('utf-8','ignore'))]
-              if found: print(n, "=>", ", ".join(found))
+              found=[p.decode() for p in pats if re.search(p, b.decode('utf-8','ignore'), re.I)]
+              if found:
+                  print(n, "=>", ", ".join(found))
+                  if n.endswith(('manifest.json','dcloud_control.xml','dcloud_properties.xml')):
+                      content=b.decode('utf-8','ignore')
+                      content=re.sub(r'(?i)(appkey\\s*[=:]\\s*)["\\']?[^,"\\'\\s}]+',r'\\1[REDACTED]',content)
+                      print(content[:2500])
+          print("=== MANIFEST META-DATA ===")
+          import subprocess
+          q=subprocess.run([__import__('glob').glob(__import__('os').environ['ANDROID_HOME']+'/build-tools/*/aapt')[-1],
+                            'dump','xmltree','app-release-latest.apk','AndroidManifest.xml'],
+                           text=True,capture_output=True)
+          for line in q.stdout.splitlines():
+              if re.search(r'dcloud|appkey|appid|uniapp',line,re.I): print(line[:300])
           PY
 
       - name: Verificar APK original
